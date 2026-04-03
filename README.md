@@ -4,6 +4,44 @@ Turn a CSV or TSV file into a clean `DATA_README.md`.
 
 `datareadme` reads a dataset, profiles its columns, and generates a simple Markdown file that helps someone understand what the data is, what each column likely means, and what quality issues to watch for.
 
+## Why people use it
+
+You get handed a file like `transactions_v3_final_REAL.csv`.
+
+You do not know:
+
+- what the dataset is really about
+- what the columns mean
+- which fields are safe to trust
+- where the obvious quality issues are
+
+`datareadme` gives you a readable first draft of that documentation in Markdown so you can keep it next to the data, edit it, and commit it.
+
+## One-command demo
+
+```bash
+datareadme examples/transactions/transactions.csv
+```
+
+That generates `examples/transactions/DATA_README.md`.
+
+Example output:
+
+```md
+# transactions.csv
+
+> Tabular dataset with 4 rows and 5 columns. Covers values from 2024-01-01 to 2024-02-10 in `created_at`. Includes 1 identifier-like column.
+
+## At a glance
+
+| | |
+|---|---|
+| Rows | 4 |
+| Columns | 5 |
+| Duplicate rows | 1 |
+| Overall null rate | 0.0% |
+```
+
 ## What it does
 
 For a tabular file, `datareadme` generates:
@@ -69,6 +107,18 @@ profile = dr.profile("examples/transactions/transactions.csv")
 
 - [transactions example](examples/transactions/DATA_README.md)
 - [survey example](examples/survey/DATA_README.md)
+
+## Why not a profiling dashboard?
+
+`datareadme` is for documentation, not deep statistical exploration.
+
+If you want a large profiling report, correlation analysis, or distribution-heavy dashboards, use a profiling tool.
+If you want a clean `DATA_README.md` that a person can skim in two minutes, use `datareadme`.
+
+## Launch Kit
+
+- [Demo script](docs/demo-script.md)
+- [Launch copy](docs/launch-kit.md)
 
 ## Development
 

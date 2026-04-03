@@ -3,3 +3,8 @@ __pycache__/
 .pytest_cache/
 .DS_Store
 *.egg-info/
+tmp/
+AI.md
+BUILD_LOG.md
+PROGRESS.md
+BENCHMARKS.md

@@ -8,6 +8,7 @@ from typing import Any
 import pandas as pd
 
 from .loader import load_table
+from .narrator import narrate_profile
 from .profiler import profile_dataframe
 from .renderer import render_markdown
 
@@ -27,18 +28,21 @@ def profile(source: str | Path | pd.DataFrame, *, sample: int | None = None, tit
         file_size_bytes = loaded.file_size_bytes
         sampled = loaded.sampled
         row_count_estimate = loaded.row_count_estimate
+        load_notes = loaded.load_notes
     return profile_dataframe(
         df,
         filename=filename,
         file_size_bytes=file_size_bytes,
         sampled=sampled,
         row_count_estimate=row_count_estimate,
+        load_notes=load_notes if not isinstance(source, pd.DataFrame) else [],
     )
 
 
 def narrate(profile_data: dict[str, Any], *, llm: str | None = None) -> str:
-    """Render a profile into Markdown. LLM support is reserved for later."""
-    return render_markdown(profile_data, llm_enabled=bool(llm and llm != "none"))
+    """Render a profile into Markdown, with a prepared seam for optional narration."""
+    narration = narrate_profile(profile_data, backend=llm or "none")
+    return render_markdown(profile_data, narration=narration, llm_enabled=narration["enabled"])
 
 
 def generate(

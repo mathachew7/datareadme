@@ -9,5 +9,6 @@ def test_generate_markdown_from_fixture() -> None:
     markdown = generate(fixture)
 
     assert "# transactions.csv" in markdown
+    assert "## Structure" in markdown
     assert "## Columns" in markdown
     assert "`customer_id`" in markdown

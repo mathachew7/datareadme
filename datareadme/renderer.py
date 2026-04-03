@@ -5,15 +5,24 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from collections import Counter
+
 from .inferrer import infer_column_description, infer_dataset_summary
 
 
-def render_markdown(profile: dict[str, Any], *, llm_enabled: bool = False) -> str:
+def render_markdown(
+    profile: dict[str, Any],
+    *,
+    narration: dict[str, Any] | None = None,
+    llm_enabled: bool = False,
+) -> str:
     """Render a profile dictionary into a Markdown document."""
     sections = [
-        _render_header(profile, llm_enabled=llm_enabled),
+        _render_header(profile, narration=narration, llm_enabled=llm_enabled),
         _render_at_a_glance(profile),
-        _render_columns(profile),
+        _render_structure(profile),
+        _render_load_notes(profile),
+        _render_columns(profile, narration=narration),
         _render_quality_notes(profile),
         _render_code_snippet(profile),
         _render_footer(),
@@ -21,12 +30,14 @@ def render_markdown(profile: dict[str, Any], *, llm_enabled: bool = False) -> st
     return "\n\n".join(section for section in sections if section)
 
 
-def _render_header(profile: dict[str, Any], *, llm_enabled: bool) -> str:
-    summary = infer_dataset_summary(profile)
+def _render_header(profile: dict[str, Any], *, narration: dict[str, Any] | None, llm_enabled: bool) -> str:
+    summary = narration.get("dataset_description") if narration else None
+    if not summary:
+        summary = infer_dataset_summary(profile)
     if profile["sampled"]:
         summary += f" Statistics are based on a sample of {profile['row_count']:,} rows."
     if llm_enabled:
-        summary += " AI narration is planned for a later release."
+        summary += " Description enhanced with optional narration."
     return f"# {profile['filename']}\n\n> {summary}"
 
 
@@ -51,17 +62,44 @@ def _render_at_a_glance(profile: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _render_columns(profile: dict[str, Any]) -> str:
+def _render_structure(profile: dict[str, Any]) -> str:
+    role_counts = Counter(column.get("role", "descriptor") for column in profile["columns"])
+    lines = [
+        "## Structure",
+        "",
+        "| | |",
+        "|---|---|",
+        f"| Measure columns | {role_counts.get('measure', 0)} |",
+        f"| Categorical columns | {role_counts.get('category', 0)} |",
+        f"| Temporal columns | {role_counts.get('temporal', 0)} |",
+        f"| Identifier columns | {role_counts.get('identifier', 0)} |",
+    ]
+    return "\n".join(lines)
+
+
+def _render_load_notes(profile: dict[str, Any]) -> str:
+    notes = []
+    if profile.get("sampled"):
+        notes.append(f"- Statistics are based on a sample of {profile['row_count']:,} rows.")
+    notes.extend(profile.get("load_notes", []))
+    if not notes:
+        return ""
+    return "## Profiling notes\n\n" + "\n".join(notes)
+
+
+def _render_columns(profile: dict[str, Any], *, narration: dict[str, Any] | None) -> str:
     lines = [
         "## Columns",
         "",
-        "| Column | Type | Nulls | Description |",
-        "|---|---|---|---|",
+        "| Column | Type | Role | Nulls | Description |",
+        "|---|---|---|---|---|",
     ]
+    description_overrides = narration.get("column_descriptions", {}) if narration else {}
     for column in profile["columns"]:
-        description = infer_column_description(column).replace("\n", " ").strip()
+        description = description_overrides.get(column["name"]) or infer_column_description(column)
+        description = description.replace("\n", " ").strip()
         lines.append(
-            f"| `{column['name']}` | {column['dtype_display']} | {column['null_pct']:.1f}% | {description} |"
+            f"| `{column['name']}` | {column['dtype_display']} | {_display_role(column.get('role', 'descriptor'))} | {column['null_pct']:.1f}% | {description} |"
         )
     return "\n".join(lines)
 
@@ -76,6 +114,10 @@ def _render_quality_notes(profile: dict[str, Any]) -> str:
         elif column["null_pct"] >= 20:
             notes.append(
                 f"- `{column['name']}`: {column['null_pct']:.1f}% null; review before analysis."
+            )
+        elif column["null_pct"] >= 1:
+            notes.append(
+                f"- `{column['name']}`: {column['null_pct']:.1f}% null; likely manageable, but worth checking before use."
             )
         if column["flags"]["likely_computed"]:
             notes.append(
@@ -105,10 +147,13 @@ def _render_quality_notes(profile: dict[str, Any]) -> str:
 
 
 def _render_code_snippet(profile: dict[str, Any]) -> str:
-    lines = [
-        "import pandas as pd",
-        f'df = pd.read_csv("{profile["filename"]}")',
-    ]
+    lines = ["import pandas as pd"]
+    if _has_generated_headers(profile):
+        column_names = ", ".join(f'"{column["name"]}"' for column in profile["columns"])
+        lines.append(f'df = pd.read_csv("{profile["filename"]}", header=None)')
+        lines.append(f"df.columns = [{column_names}]")
+    else:
+        lines.append(f'df = pd.read_csv("{profile["filename"]}")')
     date_columns = [
         column["name"]
         for column in profile["columns"]
@@ -121,7 +166,7 @@ def _render_code_snippet(profile: dict[str, Any]) -> str:
 
 
 def _render_footer() -> str:
-    return "---\n*Generated by datareadme*"
+    return "---\n*Generated by datareadme · Review and edit inferred descriptions before publication.*"
 
 
 def _format_size(file_size_bytes: int | None) -> str:
@@ -137,3 +182,20 @@ def _format_size(file_size_bytes: int | None) -> str:
     if unit == "B":
         return f"{int(size)} {unit}"
     return f"{size:.1f} {unit}"
+
+
+def _has_generated_headers(profile: dict[str, Any]) -> bool:
+    return any("generated names like `col_0`" in note for note in profile.get("load_notes", []))
+
+
+def _display_role(role: str) -> str:
+    return {
+        "measure": "measure",
+        "category": "category",
+        "temporal": "temporal",
+        "identifier": "identifier",
+        "descriptor": "descriptor",
+        "text": "text",
+        "target": "target",
+        "location": "location",
+    }.get(role, role)

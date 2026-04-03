@@ -1,58 +1,60 @@
 # datareadme
 
-Turn tabular data into readable dataset documentation in seconds.
+Turn a CSV or TSV file into a clean `DATA_README.md`.
 
-`datareadme` generates a repository-friendly `DATA_README.md` that explains what a dataset appears to be, what each column likely means, and what quality issues deserve attention before analysis.
+`datareadme` reads a dataset, profiles its columns, and generates a simple Markdown file that helps someone understand what the data is, what each column likely means, and what quality issues to watch for.
 
-## Why this exists
+## What it does
 
-Most datasets arrive with missing context. You inherit a file like `transactions_v3_final_REAL.csv`, but not the explanation that makes it usable. Existing tools often optimize for statistical depth or enterprise catalog workflows. `datareadme` focuses on the simpler job: produce a Markdown document someone can read in two minutes and commit next to the data.
+For a tabular file, `datareadme` generates:
 
-## Current scope
+- a short plain-English dataset summary
+- a compact "At a glance" section
+- a columns table with inferred descriptions
+- data quality notes for nulls, duplicates, mixed values, and other warnings
+- a small loading snippet for pandas
 
-The first release is intentionally narrow:
+The goal is not a giant profiling report. The goal is documentation you can keep next to the data.
 
-- CSV and TSV input
-- Markdown output
-- strong no-LLM mode
-- CLI and Python API
+## Install
 
-## Quick start
+From the repo:
 
 ```bash
 python -m pip install -e .
-datareadme examples/transactions/transactions.csv
 ```
 
-Preview instead of saving:
+## Use it
+
+Generate a README next to the source file:
 
 ```bash
-datareadme examples/transactions/transactions.csv --preview
+datareadme path/to/data.csv
 ```
 
-## What it generates
+Write to a specific file:
 
-Each generated `DATA_README.md` includes:
-
-- a short dataset summary
-- an at-a-glance table
-- a columns table with inferred descriptions
-- data quality notes
-- a loading snippet
-
-Example output:
-
-```md
-# transactions.csv
-
-> Tabular dataset with 4 rows and 5 columns. Covers values from 2024-01-01
-> to 2024-02-10 in `created_at`. Includes 1 identifier-like column.
+```bash
+datareadme path/to/data.csv -o DATA_README.md
 ```
 
-See full examples:
+Preview without saving:
 
-- [transactions example](/Users/subashyadav/Documents/projects/datareadme/examples/transactions/DATA_README.md)
-- [survey example](/Users/subashyadav/Documents/projects/datareadme/examples/survey/DATA_README.md)
+```bash
+datareadme path/to/data.csv --preview
+```
+
+Limit profiling to the first `N` rows:
+
+```bash
+datareadme path/to/data.csv --sample 10000
+```
+
+The current release is focused on:
+
+- CSV and TSV input
+- Markdown output
+- strong no-LLM behavior by default
 
 ## Python API
 
@@ -63,16 +65,14 @@ markdown = dr.generate("examples/transactions/transactions.csv")
 profile = dr.profile("examples/transactions/transactions.csv")
 ```
 
-## Project structure
+## Examples
 
-- [AI.md](/Users/subashyadav/Documents/projects/datareadme/AI.md): product intent and build guardrails
-- [PROGRESS.md](/Users/subashyadav/Documents/projects/datareadme/PROGRESS.md): current project state
-- [BUILD_LOG.md](/Users/subashyadav/Documents/projects/datareadme/BUILD_LOG.md): lightweight development log
-- [docs/index.md](/Users/subashyadav/Documents/projects/datareadme/docs/index.md): supporting docs
+- [transactions example](examples/transactions/DATA_README.md)
+- [survey example](examples/survey/DATA_README.md)
 
 ## Development
 
-Install local dependencies:
+Install development dependencies:
 
 ```bash
 python -m pip install -e '.[dev]'

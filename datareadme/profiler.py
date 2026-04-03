@@ -13,7 +13,7 @@ from pandas.api.types import (
     is_numeric_dtype,
 )
 
-from .inferrer import infer_flags, infer_semantic_type
+from .inferrer import infer_column_evidence, infer_flags, infer_semantic_type, refine_inferences_with_context
 
 
 def profile_dataframe(
@@ -23,6 +23,7 @@ def profile_dataframe(
     file_size_bytes: int | None,
     sampled: bool,
     row_count_estimate: int,
+    load_notes: list[str],
 ) -> dict[str, Any]:
     """Generate a serializable profile dictionary from a DataFrame."""
     columns = []
@@ -36,7 +37,15 @@ def profile_dataframe(
         columns.append(column_profile)
 
     for column in columns:
-        column["flags"] = infer_flags(column, row_count)
+        column["inference"] = infer_column_evidence(column, row_count)
+        column["semantic_type"] = column["inference"]["semantic_type"]
+        column["role"] = column["inference"]["role"]
+
+    refine_inferences_with_context(columns)
+
+    money_column_count = sum(1 for column in columns if column["semantic_type"] == "money")
+    for column in columns:
+        column["flags"] = infer_flags(column, row_count, money_column_count=money_column_count)
 
     return {
         "filename": filename,
@@ -49,6 +58,7 @@ def profile_dataframe(
         "overall_null_pct": round(overall_null_pct, 1),
         "generation_timestamp": datetime.now(timezone.utc).isoformat(),
         "sampled": sampled,
+        "load_notes": load_notes,
         "columns": columns,
     }
 
@@ -63,6 +73,8 @@ def _profile_column(series: pd.Series, *, position: int) -> dict[str, Any]:
     dtype_display = _display_dtype(series)
     semantic_type = infer_semantic_type(name, dtype_display)
     mixed_type = _has_mixed_python_types(non_null)
+    if dtype_display == "string":
+        mixed_type = mixed_type or _has_mixed_value_patterns(non_null)
 
     profile: dict[str, Any] = {
         "name": name,
@@ -144,13 +156,18 @@ def _looks_datetime(series: pd.Series) -> bool:
         return False
     sample = non_null.astype(str).head(25)
     date_like_ratio = sample.str.contains(r"\d", regex=True).mean()
-    separator_ratio = sample.str.contains(r"[-/:T ]", regex=True).mean()
+    separator_ratio = sample.str.contains(r"[-/:T]", regex=True).mean()
     month_name_ratio = sample.str.contains(
         r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b",
         flags=re.IGNORECASE,
         regex=True,
     ).mean()
-    if (date_like_ratio < 0.8) or (separator_ratio < 0.5 and month_name_ratio < 0.3):
+    clock_ratio = sample.str.contains(r"\d{1,2}:\d{2}", regex=True).mean()
+    iso_ratio = sample.str.contains(r"\d{4}-\d{2}-\d{2}", regex=True).mean()
+    if (
+        date_like_ratio < 0.8
+        or (separator_ratio < 0.5 and month_name_ratio < 0.3 and clock_ratio < 0.3 and iso_ratio < 0.3)
+    ):
         return False
     parsed = pd.to_datetime(sample, errors="coerce")
     return bool(len(parsed) and parsed.notna().mean() >= 0.7)
@@ -172,6 +189,14 @@ def _has_mixed_python_types(series: pd.Series) -> bool:
         return False
     type_names = {type(value).__name__ for value in series.head(100).tolist()}
     return len(type_names) > 1
+
+
+def _has_mixed_value_patterns(series: pd.Series) -> bool:
+    if len(series) == 0:
+        return False
+    sample = series.astype(str).head(100)
+    numeric_like = sample.str.fullmatch(r"-?\d+(?:\.\d+)?").fillna(False)
+    return bool(numeric_like.any() and (~numeric_like).any())
 
 
 def _maybe_float(value: Any) -> float | None:

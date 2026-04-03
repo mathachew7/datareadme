@@ -1,0 +1,5 @@
+customer_id,created_at,status,total_amount,email
+101,2024-01-01,complete,19.99,amy@example.com
+102,2024-01-04,pending,29.99,bob@example.com
+103,2024-02-10,complete,49.50,charlie@example.com
+103,2024-02-10,complete,49.50,charlie@example.com
